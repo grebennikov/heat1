@@ -1,0 +1,8 @@
+/var/log/heat/heat-api-cloudwatch.log {
+    daily
+    missingok
+    compress 
+    delaycompress
+    notifempty   
+    copytruncate
+}

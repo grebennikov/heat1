@@ -1,0 +1,78 @@
+#!/usr/bin/make -f
+
+PYTHONS:=$(shell pyversions -vr)
+#PYTHON3S:=$(shell py3versions -vr)
+
+include /usr/share/openstack-pkg-tools/pkgos.make
+export OSLO_PACKAGE_VERSION=$(shell dpkg-parsechangelog | grep Version: | cut -d' ' -f2 | sed -e 's/^[[:digit:]]*://' -e 's/[-].*//' -e 's/~/.0/')
+
+%:
+	dh $@ --buildsystem=python_distutils --with python2,sphinxdoc,systemd
+
+ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
+override_dh_auto_test:
+	rm -rf .testrepository
+	testr init
+	set -e ; set -x ; \
+		TEMP_REZ=`mktemp -t` ; \
+		PYTHONPATH=$(CURDIR) testr run --subunit 'heat.tests.*' | tee $$TEMP_REZ | subunit2pyunit || true ; \
+		cat $$TEMP_REZ | subunit-filter -s --no-passthrough | subunit-stats || true ; \
+		rm -f $$TEMP_REZ ;
+	testr slowest
+endif
+
+override_dh_clean:
+	dh_clean
+	rm -rf heat.egg-info .testrepository
+	rm -rf doc/build
+	find . -iname '*.pyc' -delete
+	rm -f run_tests.err.log
+	rm -f \
+		debian/heat-common.postinst \
+		debian/heat-common.config
+	rm -f debian/*.init debian/*.service debian/*.upstart
+
+override_dh_install:
+	mkdir -p $(CURDIR)/debian/heat-common/usr/share/heat-common
+	oslo-config-generator \
+		--namespace heat.common.config \
+                --namespace heat.common.context \
+		--namespace heat.common.crypt \
+		--namespace heat.common.heat_keystoneclient \
+		--namespace heat.common.wsgi \
+		--namespace heat.engine.clients \
+		--namespace heat.engine.notification \
+		--namespace heat.engine.resources \
+                --namespace heat.api.middleware.ssl \
+		--namespace heat.api.aws.ec2token \
+		--namespace keystonemiddleware.auth_token \
+		--namespace oslo.messaging \
+                --namespace oslo.middleware \
+		--namespace oslo.db \
+		--namespace oslo.log \
+                --namespace oslo.policy \
+                --namespace oslo.service.service \
+                --namespace oslo.service.periodic_task \
+                --namespace oslo.service.sslutil \
+		--wrap-width 140 \
+		--output-file $(CURDIR)/debian/heat-common/usr/share/heat-common/heat.conf
+	sed -i 's|^[# \t]*connection[\t #]*=.*|connection=sqlite:////var/lib/heat/heatdb|' $(CURDIR)/debian/heat-common/usr/share/heat-common/heat.conf
+	sed -i 's|^[# \t]*auth_protocol[\t #]*=.*|auth_protocol = http|' $(CURDIR)/debian/heat-common/usr/share/heat-common/heat.conf
+
+
+	dh_install --fail-missing -Xbin/cinder-keystone-setup
+	# Some files are missing, fix that...
+	cp -axuf heat/db/sqlalchemy/migrate_repo/* $(CURDIR)/debian/python-heat/usr/lib/python2.7/dist-packages/heat/db/sqlalchemy/migrate_repo
+	cp -r heat/cloudinit/* $(CURDIR)/debian/python-heat/usr/lib/python2.7/dist-packages/heat/cloudinit/
+
+override_dh_auto_build:
+	dh_auto_build
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func heat-common.postinst
+	/usr/share/openstack-pkg-tools/pkgos_insert_include pkgos_func heat-common.config
+
+override_dh_sphinxdoc:
+ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
+	python setup.py build_sphinx
+	cp -rf doc/build/html $(CURDIR)/debian/heat-doc/usr/share/doc/heat-doc
+	dh_sphinxdoc -O--buildsystem=python_distutils
+endif

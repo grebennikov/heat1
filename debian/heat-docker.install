@@ -1,0 +1,1 @@
+contrib/heat_docker/heat_docker/* /usr/lib/heat/docker

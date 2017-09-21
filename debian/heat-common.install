@@ -1,0 +1,11 @@
+/usr/bin/heat-db-setup
+/usr/bin/heat-keystone-setup
+/usr/bin/heat-keystone-setup-domain
+/usr/bin/heat-manage
+/usr/bin/heat-wsgi-api
+/usr/bin/heat-wsgi-api-cfn
+/usr/bin/heat-wsgi-api-cloudwatch
+etc/heat/api-paste.ini
+etc/heat/environment.d/default.yaml
+etc/heat/policy.json
+etc/heat/templates
